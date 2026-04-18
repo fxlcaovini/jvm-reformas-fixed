@@ -11,10 +11,11 @@
         "backgroundColor": "#0B1220"
       },
       "permissions": [
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO",
-        "CAMERA",
-        "POST_NOTIFICATIONS"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "ios": {
@@ -28,9 +29,14 @@
           "photosPermission": "O app precisa acessar suas fotos para anexar comprovantes, notas fiscais e imagens da obra.",
           "cameraPermission": "O app precisa acessar a câmera para registrar fotos da obra e documentos."
         }
-      ]
-    ]
-   
-}
-
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9a6d52af-6d34-46f9-bb07-840987ef1e6b"
+      }
+    },
+    "owner": "fxlcaovinii"
+  }
 }
