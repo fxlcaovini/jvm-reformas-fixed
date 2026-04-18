@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "JVM Reformas",
+    "slug": "jvm-reformas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.jvmreformas.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1220"
+      },
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "CAMERA",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.jvmreformas.app"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app precisa acessar suas fotos para anexar comprovantes, notas fiscais e imagens da obra.",
+          "cameraPermission": "O app precisa acessar a câmera para registrar fotos da obra e documentos."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "change-me-if-you-build-with-eas"
+      }
+    }
+  }
+}
