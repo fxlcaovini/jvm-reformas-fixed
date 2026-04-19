@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TextField } from '@/components/TextField';
 import { EmptyState } from '@/components/EmptyState';
 import { ChoicePills } from '@/components/ChoicePills';
+import { CollapsibleItemCard } from '@/components/CollapsibleItemCard';
 import { clientsRepo, materialsRepo, projectsRepo } from '@/db/repositories';
 import type { Client, Material, Project, ProjectStage } from '@/types/models';
 import { colors, spacing } from '@/theme/tokens';
@@ -132,6 +133,7 @@ export function ProjectsScreen() {
     });
 
     setProjectForm(defaultProjectForm);
+    setExpandedProjectId(null);
     await load();
   };
 
@@ -150,6 +152,24 @@ export function ProjectsScreen() {
       progress: String(project.progress),
       notes: project.notes || ''
     });
+  };
+
+  const removeProject = (project: Project & { clientName: string }) => {
+    Alert.alert('Excluir obra', `Deseja excluir a obra "${project.title}"? Os materiais, estágios, anexos, lançamentos financeiros e registros de equipe vinculados serão removidos.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          await projectsRepo.remove(project.id);
+          if (projectForm.id === project.id) {
+            setProjectForm(defaultProjectForm);
+          }
+          setExpandedProjectId((prev) => (prev === project.id ? null : prev));
+          await load();
+        }
+      }
+    ]);
   };
 
   const tweakStage = async (stage: ProjectStage, delta: number) => {
@@ -180,8 +200,8 @@ export function ProjectsScreen() {
   };
 
   return (
-    <Screen title="Obras" subtitle="Cadastre, acompanhe etapas, mídia e materiais por obra.">
-      <SectionCard title={projectForm.id ? 'Editar obra' : 'Nova obra'} action={<PrimaryButton label="Salvar" onPress={saveProject} />}>
+    <Screen title="Obras" subtitle="Cadastre, acompanhe etapas, mídias e materiais por obra.">
+      <SectionCard title={projectForm.id ? 'Editar obra' : 'Nova obra'} action={<PrimaryButton label="Salvar obra" onPress={saveProject} />}>
         <Text style={styles.label}>Cliente</Text>
         <ChoicePills
           value={(projectForm.clientId || null) as string | null}
@@ -190,19 +210,19 @@ export function ProjectsScreen() {
         />
         <TextField label="Nome da obra" value={projectForm.title} onChangeText={(title) => setProjectForm((prev) => ({ ...prev, title }))} />
         <TextField label="Endereço" value={projectForm.address} onChangeText={(address) => setProjectForm((prev) => ({ ...prev, address }))} />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}><TextField label="Latitude" value={projectForm.lat} onChangeText={(lat) => setProjectForm((prev) => ({ ...prev, lat }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Longitude" value={projectForm.lng} onChangeText={(lng) => setProjectForm((prev) => ({ ...prev, lng }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}><TextField label="Latitude" value={projectForm.lat} onChangeText={(lat) => setProjectForm((prev) => ({ ...prev, lat }))} /></View>
+          <View style={styles.flexField}><TextField label="Longitude" value={projectForm.lng} onChangeText={(lng) => setProjectForm((prev) => ({ ...prev, lng }))} /></View>
         </View>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}><TextField label="Início (AAAA-MM-DD)" value={projectForm.startDate} onChangeText={(startDate) => setProjectForm((prev) => ({ ...prev, startDate }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Prazo (AAAA-MM-DD)" value={projectForm.dueDate} onChangeText={(dueDate) => setProjectForm((prev) => ({ ...prev, dueDate }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}><TextField label="Início (AAAA-MM-DD)" value={projectForm.startDate} onChangeText={(startDate) => setProjectForm((prev) => ({ ...prev, startDate }))} /></View>
+          <View style={styles.flexField}><TextField label="Prazo (AAAA-MM-DD)" value={projectForm.dueDate} onChangeText={(dueDate) => setProjectForm((prev) => ({ ...prev, dueDate }))} /></View>
         </View>
         <Text style={styles.label}>Status</Text>
         <ChoicePills value={projectForm.status} options={statusOptions} onChange={(status) => setProjectForm((prev) => ({ ...prev, status }))} />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}><TextField label="Valor total" keyboardType="decimal-pad" value={projectForm.totalValue} onChangeText={(totalValue) => setProjectForm((prev) => ({ ...prev, totalValue }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Progresso (%)" keyboardType="number-pad" value={projectForm.progress} onChangeText={(progress) => setProjectForm((prev) => ({ ...prev, progress }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}><TextField label="Valor total" keyboardType="decimal-pad" value={projectForm.totalValue} onChangeText={(totalValue) => setProjectForm((prev) => ({ ...prev, totalValue }))} /></View>
+          <View style={styles.flexField}><TextField label="Progresso (%)" keyboardType="number-pad" value={projectForm.progress} onChangeText={(progress) => setProjectForm((prev) => ({ ...prev, progress }))} /></View>
         </View>
         <TextField label="Observações" multiline value={projectForm.notes} onChangeText={(notes) => setProjectForm((prev) => ({ ...prev, notes }))} />
       </SectionCard>
@@ -211,47 +231,54 @@ export function ProjectsScreen() {
         {projects.length === 0 ? (
           <EmptyState title="Nenhuma obra cadastrada" subtitle="Preencha os dados acima para registrar a primeira obra." />
         ) : (
-          projects.map((project) => (
-            <View key={project.id} style={styles.projectCard}>
-              <Pressable onPress={() => setExpandedProjectId((prev) => (prev === project.id ? null : project.id))} style={{ gap: 6 }}>
-                <View style={styles.spaceBetween}>
-                  <Text style={styles.cardTitle}>{project.title}</Text>
+          projects.map((project) => {
+            const expanded = expandedProjectId === project.id;
+            const stages = stagesMap[project.id] ?? [];
+            return (
+              <CollapsibleItemCard
+                key={project.id}
+                title={project.title}
+                subtitle={`${project.clientName} • Prazo ${shortDate(project.dueDate)} • ${project.progress}% concluído`}
+                expanded={expanded}
+                onToggle={() => setExpandedProjectId((prev) => (prev === project.id ? null : project.id))}
+                badge={
                   <Text style={[styles.badge, project.status === 'atrasada' ? styles.badgeWarn : project.status === 'concluida' ? styles.badgeSuccess : styles.badgeInfo]}>
                     {project.status.replace('_', ' ')}
                   </Text>
-                </View>
-                <Text style={styles.meta}>{project.clientName}</Text>
+                }
+              >
                 <Text style={styles.meta}>{project.address}</Text>
-                <Text style={styles.meta}>Prazo: {shortDate(project.dueDate)} • Progresso: {project.progress}% • Valor: {money(project.totalValue)}</Text>
-                <Text style={styles.meta}>Anexos: {attachmentsCount[project.id] ?? 0}</Text>
-              </Pressable>
+                <Text style={styles.meta}>Valor: {money(project.totalValue)} • Anexos: {attachmentsCount[project.id] ?? 0}</Text>
+                <Text style={styles.meta}>{project.notes || 'Sem observações adicionais.'}</Text>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}><PrimaryButton label="Editar" onPress={() => editProject(project)} variant="ghost" /></View>
-                <View style={{ flex: 1 }}><PrimaryButton label="Mapa" onPress={() => openAddressInMaps(project.address, project.lat, project.lng)} variant="ghost" /></View>
-                <View style={{ flex: 1 }}><PrimaryButton label="Foto/Vídeo" onPress={() => attachMedia(project.id)} /></View>
-              </View>
+                <View style={styles.actionsWrap}>
+                  <PrimaryButton label="Editar" onPress={() => editProject(project)} variant="ghost" />
+                  <PrimaryButton label="Mapa" onPress={() => openAddressInMaps(project.address, project.lat, project.lng)} variant="ghost" />
+                  <PrimaryButton label="Foto/Vídeo" onPress={() => attachMedia(project.id)} />
+                  <PrimaryButton label="Excluir" onPress={() => removeProject(project)} variant="danger" />
+                </View>
 
-              {expandedProjectId === project.id ? (
                 <View style={{ gap: 10 }}>
                   <Text style={styles.sectionMiniTitle}>Timeline / etapas</Text>
-                  {(stagesMap[project.id] ?? []).map((stage) => (
+                  {stages.map((stage) => (
                     <View key={stage.id} style={styles.stageRow}>
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, minWidth: 150 }}>
                         <Text style={styles.stageTitle}>{stage.stageName}</Text>
                         <View style={styles.progressBarBg}>
                           <View style={[styles.progressBar, { width: `${stage.completed}%` }]} />
                         </View>
                       </View>
                       <Text style={styles.meta}>{stage.completed}%</Text>
-                      <Pressable onPress={() => tweakStage(stage, -10)} style={styles.stageBtn}><Text style={styles.stageBtnText}>-10</Text></Pressable>
-                      <Pressable onPress={() => tweakStage(stage, 10)} style={styles.stageBtn}><Text style={styles.stageBtnText}>+10</Text></Pressable>
+                      <View style={styles.smallActionsWrap}>
+                        <Pressable onPress={() => tweakStage(stage, -10)} style={styles.stageBtn}><Text style={styles.stageBtnText}>-10</Text></Pressable>
+                        <Pressable onPress={() => tweakStage(stage, 10)} style={styles.stageBtn}><Text style={styles.stageBtnText}>+10</Text></Pressable>
+                      </View>
                     </View>
                   ))}
                 </View>
-              ) : null}
-            </View>
-          ))
+              </CollapsibleItemCard>
+            );
+          })
         )}
       </SectionCard>
 
@@ -262,13 +289,13 @@ export function ProjectsScreen() {
           options={projects.map((project) => ({ label: project.title, value: project.id }))}
           onChange={(projectId) => setMaterialForm((prev) => ({ ...prev, projectId }))}
         />
-        <View style={styles.row}>
-          <View style={{ flex: 2 }}><TextField label="Material" value={materialForm.name} onChangeText={(name) => setMaterialForm((prev) => ({ ...prev, name }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Qtd." keyboardType="decimal-pad" value={materialForm.quantity} onChangeText={(quantity) => setMaterialForm((prev) => ({ ...prev, quantity }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Unidade" value={materialForm.unit} onChangeText={(unit) => setMaterialForm((prev) => ({ ...prev, unit }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={[styles.flexField, { flexBasis: 180, flexGrow: 2 }]}><TextField label="Material" value={materialForm.name} onChangeText={(name) => setMaterialForm((prev) => ({ ...prev, name }))} /></View>
+          <View style={styles.flexField}><TextField label="Qtd." keyboardType="decimal-pad" value={materialForm.quantity} onChangeText={(quantity) => setMaterialForm((prev) => ({ ...prev, quantity }))} /></View>
+          <View style={styles.flexField}><TextField label="Unidade" value={materialForm.unit} onChangeText={(unit) => setMaterialForm((prev) => ({ ...prev, unit }))} /></View>
         </View>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}>
             <Text style={styles.label}>Status</Text>
             <ChoicePills
               value={materialForm.status}
@@ -276,7 +303,7 @@ export function ProjectsScreen() {
               onChange={(status) => setMaterialForm((prev) => ({ ...prev, status }))}
             />
           </View>
-          <View style={{ flex: 1 }}><TextField label="Qtd. comprada" keyboardType="decimal-pad" value={materialForm.purchasedQuantity} onChangeText={(purchasedQuantity) => setMaterialForm((prev) => ({ ...prev, purchasedQuantity }))} /></View>
+          <View style={styles.flexField}><TextField label="Qtd. comprada" keyboardType="decimal-pad" value={materialForm.purchasedQuantity} onChangeText={(purchasedQuantity) => setMaterialForm((prev) => ({ ...prev, purchasedQuantity }))} /></View>
         </View>
 
         <Text style={styles.sectionMiniTitle}>Sugestões baseadas em obras anteriores</Text>
@@ -300,7 +327,7 @@ export function ProjectsScreen() {
         <View style={{ gap: 10 }}>
           {materials.map((material) => (
             <View key={material.id} style={styles.materialRow}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 180 }}>
                 <Text style={styles.cardTitle}>{material.name}</Text>
                 <Text style={styles.meta}>{material.projectTitle} • {material.quantity} {material.unit}</Text>
               </View>
@@ -314,25 +341,26 @@ export function ProjectsScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  rowWrap: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', flexWrap: 'wrap' },
+  flexField: { flexGrow: 1, flexBasis: 150 },
   label: { color: colors.text, fontWeight: '600' },
-  projectCard: { gap: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   meta: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   badge: { overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, color: 'white', fontSize: 12, textTransform: 'capitalize' },
   badgeWarn: { backgroundColor: colors.warning },
   badgeSuccess: { backgroundColor: colors.success },
   badgeInfo: { backgroundColor: colors.info },
-  spaceBetween: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'center' },
-  stageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
   stageTitle: { color: colors.text, textTransform: 'capitalize', marginBottom: 6 },
-  progressBarBg: { height: 10, borderRadius: 999, backgroundColor: colors.cardAlt, overflow: 'hidden' },
+  progressBarBg: { height: 10, borderRadius: 999, backgroundColor: colors.card, overflow: 'hidden' },
   progressBar: { height: '100%', backgroundColor: colors.primary, borderRadius: 999 },
-  stageBtn: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardAlt, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  stageBtn: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   stageBtnText: { color: colors.text, fontWeight: '700' },
   sectionMiniTitle: { color: colors.text, fontWeight: '700', marginTop: 4 },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   suggestionChip: { backgroundColor: colors.primarySoft, borderColor: colors.primary, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
   suggestionText: { color: colors.text, fontSize: 12, fontWeight: '600' },
-  materialRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border }
+  materialRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border, flexWrap: 'wrap' },
+  actionsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  smallActionsWrap: { flexDirection: 'row', gap: spacing.xs }
 });

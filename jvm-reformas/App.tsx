@@ -1,6 +1,7 @@
 import { ActivityIndicator, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { initDatabase } from '@/db/database';
 import { AppNavigator } from '@/navigation/AppNavigator';
@@ -35,9 +36,11 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <StatusBar style="light" />
-      <AppNavigator />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer theme={navTheme}>
+        <StatusBar style="light" />
+        <AppNavigator />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

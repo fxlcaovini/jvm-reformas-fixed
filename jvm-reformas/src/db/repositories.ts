@@ -6,12 +6,13 @@ import type {
   Client,
   FinanceEntry,
   Material,
+  Note,
   Project,
   ProjectStage,
   Worker,
   WorkerLog
 } from '@/types/models';
-import { todayIso, uuid } from '@/utils/format';
+import { uuid } from '@/utils/format';
 
 const stamp = () => new Date().toISOString();
 
@@ -35,7 +36,22 @@ export const clientsRepo = {
     await queueSync('clients', input.id ? 'update' : 'insert', { ...input, id });
     return id;
   },
-  remove: (id: string) => removeById('clients', id)
+  async remove(id: string) {
+    const linked = await queryFirst<{ projects: number; budgets: number }>(
+      `SELECT
+        (SELECT COUNT(*) FROM projects WHERE clientId = ?) AS projects,
+        (SELECT COUNT(*) FROM budgets WHERE clientId = ?) AS budgets`,
+      id,
+      id
+    );
+
+    if ((linked?.projects ?? 0) > 0 || (linked?.budgets ?? 0) > 0) {
+      throw new Error('Este cliente possui obras ou orçamentos vinculados. Remova os vínculos antes de excluir.');
+    }
+
+    await removeById('clients', id);
+    await queueSync('clients', 'delete', { id });
+  }
 };
 
 export const projectsRepo = {
@@ -62,8 +78,8 @@ export const projectsRepo = {
       input.address,
       input.lat,
       input.lng,
-      input.startDate || todayIso(),
-      input.dueDate || todayIso(),
+      input.startDate,
+      input.dueDate,
       input.status,
       input.totalValue,
       input.progress,
@@ -107,7 +123,20 @@ export const projectsRepo = {
       now
     );
   },
-  remove: (id: string) => removeById('projects', id)
+  async remove(id: string) {
+    const budgetIds = await queryAll<{ id: string }>('SELECT id FROM budgets WHERE projectId = ?', id);
+    for (const budget of budgetIds) {
+      await execute('DELETE FROM budget_items WHERE budgetId = ?', budget.id);
+    }
+    await execute('DELETE FROM budgets WHERE projectId = ?', id);
+    await execute('DELETE FROM project_stages WHERE projectId = ?', id);
+    await execute('DELETE FROM attachments WHERE projectId = ?', id);
+    await execute('DELETE FROM finance_entries WHERE projectId = ?', id);
+    await execute('DELETE FROM materials WHERE projectId = ?', id);
+    await execute('DELETE FROM worker_logs WHERE projectId = ?', id);
+    await removeById('projects', id);
+    await queueSync('projects', 'delete', { id });
+  }
 };
 
 export const financeRepo = {
@@ -203,7 +232,11 @@ export const budgetsRepo = {
       items: items.map((item) => ({ name: item.name, quantity: item.quantity, unitPrice: item.unitPrice }))
     });
   },
-  remove: (id: string) => removeById('budgets', id)
+  async remove(id: string) {
+    await execute('DELETE FROM budget_items WHERE budgetId = ?', id);
+    await removeById('budgets', id);
+    await queueSync('budgets', 'delete', { id });
+  }
 };
 
 export const workersRepo = {
@@ -251,7 +284,11 @@ export const workersRepo = {
     );
     return id;
   },
-  remove: (id: string) => removeById('workers', id)
+  async remove(id: string) {
+    await execute('DELETE FROM worker_logs WHERE workerId = ?', id);
+    await removeById('workers', id);
+    await queueSync('workers', 'delete', { id });
+  }
 };
 
 export const materialsRepo = {
@@ -297,4 +334,29 @@ export const materialsRepo = {
     return id;
   },
   remove: (id: string) => removeById('materials', id)
+};
+
+export const notesRepo = {
+  list: () => queryAll<Note>('SELECT * FROM notes ORDER BY updatedAt DESC, createdAt DESC'),
+  async save(input: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) {
+    const now = stamp();
+    const id = input.id ?? uuid();
+    await execute(
+      `INSERT OR REPLACE INTO notes (id, title, content, tag, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, COALESCE((SELECT createdAt FROM notes WHERE id = ?), ?), ?)`,
+      id,
+      input.title,
+      input.content,
+      input.tag,
+      id,
+      now,
+      now
+    );
+    await queueSync('notes', input.id ? 'update' : 'insert', { ...input, id });
+    return id;
+  },
+  async remove(id: string) {
+    await removeById('notes', id);
+    await queueSync('notes', 'delete', { id });
+  }
 };

@@ -8,7 +8,7 @@ export function SectionCard({ title, action, children }: PropsWithChildren<{ tit
       {title ? (
         <View style={styles.header}>
           <Text style={styles.title}>{title}</Text>
-          {action}
+          {action ? <View style={styles.actionWrap}>{action}</View> : null}
         </View>
       ) : null}
       {children}
@@ -28,9 +28,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: 4
   },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' }
+  actionWrap: {
+    minWidth: 150,
+    flexGrow: 1
+  },
+  title: { color: colors.text, fontSize: 16, fontWeight: '700', flexShrink: 1 }
 });

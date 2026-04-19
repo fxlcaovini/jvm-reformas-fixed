@@ -12,7 +12,8 @@ export function StatCard({ label, value, accent = colors.primary }: { label: str
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 150,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,

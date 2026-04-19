@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import type { DashboardStats } from '@/types/models';
-import { todayIso, uuid } from '@/utils/format';
+import { uuid } from '@/utils/format';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -122,6 +122,15 @@ CREATE TABLE IF NOT EXISTS materials (
   updatedAt TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tag TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_queue (
   id TEXT PRIMARY KEY NOT NULL,
   entityName TEXT NOT NULL,
@@ -135,7 +144,7 @@ CREATE TABLE IF NOT EXISTS sync_queue (
 
 export async function getDb() {
   if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync('jvm-reformas.db');
+    dbPromise = SQLite.openDatabaseAsync('jvm-reformas-clean.db');
   }
   return dbPromise;
 }
@@ -143,173 +152,7 @@ export async function getDb() {
 export async function initDatabase() {
   const db = await getDb();
   await db.execAsync(schema);
-  await seedIfNeeded(db);
   return db;
-}
-
-async function seedIfNeeded(db: SQLite.SQLiteDatabase) {
-  const count = (await db.getFirstAsync<{ total: number }>('SELECT COUNT(*) as total FROM clients'))?.total ?? 0;
-  if (count > 0) return;
-
-  const now = new Date().toISOString();
-  const clientId = uuid();
-  const projectId = uuid();
-  const budgetId = uuid();
-  const workerId = uuid();
-
-  await db.runAsync(
-    'INSERT INTO clients (id, name, phone, email, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    clientId,
-    'Marcos Silva',
-    '(11) 99999-1234',
-    'marcos@email.com',
-    'Cliente recorrente. Prefere contato por WhatsApp.',
-    now,
-    now
-  );
-
-  await db.runAsync(
-    `INSERT INTO projects (id, clientId, title, address, lat, lng, startDate, dueDate, status, totalValue, progress, notes, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    projectId,
-    clientId,
-    'Reforma Apartamento Centro',
-    'Rua Exemplo, 120 - Guarulhos/SP',
-    -23.4629,
-    -46.5333,
-    todayIso(),
-    new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10),
-    'em_andamento',
-    18500,
-    42,
-    'Cliente pediu atenção ao acabamento da cozinha.',
-    now,
-    now
-  );
-
-  for (const stage of ['fundacao', 'alvenaria', 'eletrica', 'hidraulica', 'acabamento']) {
-    await db.runAsync(
-      'INSERT INTO project_stages (id, projectId, stageName, completed, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      uuid(),
-      projectId,
-      stage,
-      stage === 'fundacao' ? 100 : stage === 'alvenaria' ? 70 : 25,
-      '',
-      now,
-      now
-    );
-  }
-
-  await db.runAsync(
-    'INSERT INTO finance_entries (id, projectId, type, category, description, amount, referenceDate, attachmentUri, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    projectId,
-    'entrada',
-    'pagamento',
-    'Entrada inicial do contrato',
-    10000,
-    todayIso(),
-    null,
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO finance_entries (id, projectId, type, category, description, amount, referenceDate, attachmentUri, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    projectId,
-    'saida',
-    'material',
-    'Compra de porcelanato e argamassa',
-    3450,
-    todayIso(),
-    null,
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO budgets (id, projectId, clientId, title, notes, templateName, signatureDataUrl, total, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    budgetId,
-    projectId,
-    clientId,
-    'Orçamento Reforma Apartamento',
-    'Prazo estimado de 30 dias.',
-    'Apartamento padrão 2 quartos',
-    null,
-    18500,
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO budget_items (id, budgetId, name, quantity, unitPrice, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    budgetId,
-    'Demolição e preparo',
-    1,
-    2500,
-    now,
-    now
-  );
-  await db.runAsync(
-    'INSERT INTO budget_items (id, budgetId, name, quantity, unitPrice, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    budgetId,
-    'Elétrica e iluminação',
-    1,
-    4200,
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO workers (id, name, phone, dailyRate, role, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    workerId,
-    'José Pedreiro',
-    '(11) 98888-1111',
-    180,
-    'Pedreiro',
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO worker_logs (id, workerId, projectId, workDate, amountPaid, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    workerId,
-    projectId,
-    todayIso(),
-    180,
-    'Diária completa',
-    now,
-    now
-  );
-
-  await db.runAsync(
-    'INSERT INTO materials (id, projectId, name, quantity, unit, status, purchasedQuantity, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    projectId,
-    'Cimento',
-    30,
-    'sacos',
-    'comprado',
-    30,
-    now,
-    now
-  );
-  await db.runAsync(
-    'INSERT INTO materials (id, projectId, name, quantity, unit, status, purchasedQuantity, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    uuid(),
-    projectId,
-    'Tinta branca fosca',
-    6,
-    'latas',
-    'pendente',
-    0,
-    now,
-    now
-  );
 }
 
 export async function queryAll<T>(sql: string, ...params: any[]) {

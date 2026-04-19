@@ -96,6 +96,12 @@ export interface Material extends BaseEntity {
   purchasedQuantity: number;
 }
 
+export interface Note extends BaseEntity {
+  title: string;
+  content: string;
+  tag: string;
+}
+
 export interface DashboardStats {
   activeProjects: number;
   delayedProjects: number;

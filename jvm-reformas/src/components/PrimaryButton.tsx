@@ -8,7 +8,7 @@ export function PrimaryButton({ label, onPress, variant = 'solid' }: { label: st
 
   return (
     <Pressable onPress={onPress} style={[styles.button, { backgroundColor, borderColor }]}> 
-      <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+      <Text style={[styles.label, { color: textColor }]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -16,6 +16,7 @@ export function PrimaryButton({ label, onPress, variant = 'solid' }: { label: st
 const styles = StyleSheet.create({
   button: {
     minHeight: 46,
+    minWidth: 110,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     alignItems: 'center',

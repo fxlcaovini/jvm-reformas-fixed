@@ -1,39 +1,41 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { SectionCard } from '@/components/SectionCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TextField } from '@/components/TextField';
 import { EmptyState } from '@/components/EmptyState';
 import { ChoicePills } from '@/components/ChoicePills';
+import { CollapsibleItemCard } from '@/components/CollapsibleItemCard';
 import { projectsRepo, workersRepo } from '@/db/repositories';
 import type { Project, Worker, WorkerLog } from '@/types/models';
 import { colors, spacing } from '@/theme/tokens';
 import { money, shortDate, todayIso } from '@/utils/format';
 
-const defaultWorkerForm = {
+const createDefaultWorkerForm = () => ({
   id: undefined as string | undefined,
   name: '',
   phone: '',
   dailyRate: '0',
   role: ''
-};
+});
 
-const defaultLogForm = {
+const createDefaultLogForm = () => ({
   id: undefined as string | undefined,
   workerId: '',
   projectId: '',
   workDate: todayIso(),
   amountPaid: '0',
   notes: ''
-};
+});
 
 export function TeamScreen() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [logs, setLogs] = useState<(WorkerLog & { workerName: string; projectTitle: string | null })[]>([]);
-  const [workerForm, setWorkerForm] = useState(defaultWorkerForm);
-  const [logForm, setLogForm] = useState(defaultLogForm);
+  const [workerForm, setWorkerForm] = useState(createDefaultWorkerForm());
+  const [logForm, setLogForm] = useState(createDefaultLogForm());
+  const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [loadedWorkers, loadedProjects, loadedLogs] = await Promise.all([workersRepo.list(), projectsRepo.list(), workersRepo.logs()]);
@@ -52,22 +54,37 @@ export function TeamScreen() {
     return workers.map((worker) => ({
       worker,
       totalPaid: logs.filter((log) => log.workerId === worker.id).reduce((sum, log) => sum + log.amountPaid, 0),
-      totalDays: logs.filter((log) => log.workerId === worker.id).length
+      totalDays: logs.filter((log) => log.workerId === worker.id).length,
+      recentLogs: logs.filter((log) => log.workerId === worker.id).slice(0, 5)
     }));
   }, [logs, workers]);
 
   const saveWorker = async () => {
+    if (!workerForm.name.trim()) return;
     await workersRepo.saveWorker({
+      id: workerForm.id,
       name: workerForm.name,
       phone: workerForm.phone,
       dailyRate: Number(workerForm.dailyRate || 0),
       role: workerForm.role
     });
-    setWorkerForm(defaultWorkerForm);
+    setWorkerForm(createDefaultWorkerForm());
+    setExpandedWorkerId(null);
     await load();
   };
 
+  const editWorker = (worker: Worker) => {
+    setWorkerForm({
+      id: worker.id,
+      name: worker.name,
+      phone: worker.phone,
+      dailyRate: String(worker.dailyRate),
+      role: worker.role
+    });
+  };
+
   const saveLog = async () => {
+    if (!logForm.workerId) return;
     await workersRepo.saveLog({
       workerId: logForm.workerId,
       projectId: logForm.projectId || null,
@@ -75,17 +92,35 @@ export function TeamScreen() {
       amountPaid: Number(logForm.amountPaid || 0),
       notes: logForm.notes
     });
-    setLogForm(defaultLogForm);
+    setLogForm(createDefaultLogForm());
     await load();
+  };
+
+  const removeWorker = (worker: Worker) => {
+    Alert.alert('Excluir funcionário', `Deseja excluir "${worker.name}"? Os registros de diárias desse funcionário também serão removidos.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          await workersRepo.remove(worker.id);
+          if (workerForm.id === worker.id) {
+            setWorkerForm(createDefaultWorkerForm());
+          }
+          setExpandedWorkerId((prev) => (prev === worker.id ? null : prev));
+          await load();
+        }
+      }
+    ]);
   };
 
   return (
     <Screen title="Equipe" subtitle="Cadastro de funcionários, diárias, histórico e pagamentos por obra.">
-      <SectionCard title="Novo funcionário" action={<PrimaryButton label="Salvar funcionário" onPress={saveWorker} />}>
+      <SectionCard title={workerForm.id ? 'Editar funcionário' : 'Novo funcionário'} action={<PrimaryButton label="Salvar funcionário" onPress={saveWorker} />}>
         <TextField label="Nome" value={workerForm.name} onChangeText={(name) => setWorkerForm((prev) => ({ ...prev, name }))} />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}><TextField label="Telefone" value={workerForm.phone} onChangeText={(phone) => setWorkerForm((prev) => ({ ...prev, phone }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Função" value={workerForm.role} onChangeText={(role) => setWorkerForm((prev) => ({ ...prev, role }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}><TextField label="Telefone" value={workerForm.phone} onChangeText={(phone) => setWorkerForm((prev) => ({ ...prev, phone }))} /></View>
+          <View style={styles.flexField}><TextField label="Função" value={workerForm.role} onChangeText={(role) => setWorkerForm((prev) => ({ ...prev, role }))} /></View>
         </View>
         <TextField label="Valor da diária" keyboardType="decimal-pad" value={workerForm.dailyRate} onChangeText={(dailyRate) => setWorkerForm((prev) => ({ ...prev, dailyRate }))} />
       </SectionCard>
@@ -98,9 +133,9 @@ export function TeamScreen() {
         }} />
         <Text style={styles.label}>Obra</Text>
         <ChoicePills value={(logForm.projectId || null) as string | null} options={projects.map((project) => ({ label: project.title, value: project.id }))} onChange={(projectId) => setLogForm((prev) => ({ ...prev, projectId }))} />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}><TextField label="Data (AAAA-MM-DD)" value={logForm.workDate} onChangeText={(workDate) => setLogForm((prev) => ({ ...prev, workDate }))} /></View>
-          <View style={{ flex: 1 }}><TextField label="Valor pago" keyboardType="decimal-pad" value={logForm.amountPaid} onChangeText={(amountPaid) => setLogForm((prev) => ({ ...prev, amountPaid }))} /></View>
+        <View style={styles.rowWrap}>
+          <View style={styles.flexField}><TextField label="Data (AAAA-MM-DD)" value={logForm.workDate} onChangeText={(workDate) => setLogForm((prev) => ({ ...prev, workDate }))} /></View>
+          <View style={styles.flexField}><TextField label="Valor pago" keyboardType="decimal-pad" value={logForm.amountPaid} onChangeText={(amountPaid) => setLogForm((prev) => ({ ...prev, amountPaid }))} /></View>
         </View>
         <TextField label="Observações" multiline value={logForm.notes} onChangeText={(notes) => setLogForm((prev) => ({ ...prev, notes }))} />
       </SectionCard>
@@ -109,32 +144,37 @@ export function TeamScreen() {
         {paymentsByWorker.length === 0 ? (
           <EmptyState title="Nenhum funcionário" subtitle="Cadastre sua equipe para controlar diárias e histórico." />
         ) : (
-          paymentsByWorker.map(({ worker, totalPaid, totalDays }) => (
-            <View key={worker.id} style={styles.itemRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{worker.name}</Text>
-                <Text style={styles.meta}>{worker.role} • Diária padrão {money(worker.dailyRate)}</Text>
-                <Text style={styles.meta}>Total pago: {money(totalPaid)} • Registros: {totalDays}</Text>
-              </View>
-            </View>
-          ))
-        )}
-      </SectionCard>
+          paymentsByWorker.map(({ worker, totalPaid, totalDays, recentLogs }) => {
+            const expanded = expandedWorkerId === worker.id;
+            return (
+              <CollapsibleItemCard
+                key={worker.id}
+                title={worker.name}
+                subtitle={`${worker.role || 'Sem função'} • Diária ${money(worker.dailyRate)} • ${totalDays} diária(s)`}
+                expanded={expanded}
+                onToggle={() => setExpandedWorkerId((prev) => (prev === worker.id ? null : worker.id))}
+              >
+                <Text style={styles.meta}>{worker.phone || 'Sem telefone informado'}</Text>
+                <Text style={styles.meta}>Total pago: {money(totalPaid)}</Text>
 
-      <SectionCard title="Histórico de trabalho">
-        {logs.length === 0 ? (
-          <EmptyState title="Sem registros" subtitle="Registre diárias para acompanhar pagamentos e produtividade." />
-        ) : (
-          logs.map((log) => (
-            <View key={log.id} style={styles.itemRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{log.workerName}</Text>
-                <Text style={styles.meta}>{log.projectTitle ?? 'Sem obra'} • {shortDate(log.workDate)}</Text>
-                <Text style={styles.meta}>{log.notes || 'Sem observações'}</Text>
-              </View>
-              <Text style={styles.amount}>{money(log.amountPaid)}</Text>
-            </View>
-          ))
+                <View style={styles.actionsWrap}>
+                  <PrimaryButton label="Editar" onPress={() => editWorker(worker)} variant="ghost" />
+                  <PrimaryButton label="Excluir" onPress={() => removeWorker(worker)} variant="danger" />
+                </View>
+
+                {recentLogs.length > 0 ? (
+                  <View style={{ gap: 6 }}>
+                    <Text style={styles.subheading}>Últimos registros</Text>
+                    {recentLogs.map((log) => (
+                      <Text key={log.id} style={styles.meta}>• {shortDate(log.workDate)} — {log.projectTitle ?? 'Sem obra'} — {money(log.amountPaid)}</Text>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.meta}>Nenhuma diária registrada ainda.</Text>
+                )}
+              </CollapsibleItemCard>
+            );
+          })
         )}
       </SectionCard>
     </Screen>
@@ -142,10 +182,10 @@ export function TeamScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: spacing.sm },
+  rowWrap: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  flexField: { flexGrow: 1, flexBasis: 150 },
   label: { color: colors.text, fontWeight: '600' },
-  itemRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  title: { color: colors.text, fontWeight: '700' },
+  subheading: { color: colors.text, fontWeight: '700' },
   meta: { color: colors.muted, fontSize: 13 },
-  amount: { color: colors.success, fontWeight: '800' }
+  actionsWrap: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }
 });

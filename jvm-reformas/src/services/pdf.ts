@@ -15,7 +15,6 @@ export async function exportBudgetPdf(
       <tr>
         <td>${item.name}</td>
         <td>${item.quantity}</td>
-        <td>${money(item.unitPrice)}</td>
         <td>${money(item.quantity * item.unitPrice)}</td>
       </tr>`
     )
@@ -64,7 +63,6 @@ export async function exportBudgetPdf(
           <tr>
             <th>Item</th>
             <th>Qtd.</th>
-            <th>Unitário</th>
             <th>Total</th>
           </tr>
         </thead>
