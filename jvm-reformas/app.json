@@ -29,11 +29,7 @@
           "cameraPermission": "O app precisa acessar a câmera para registrar fotos da obra e documentos."
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "change-me-if-you-build-with-eas"
-      }
-    }
+    ]
+
   }
 }
